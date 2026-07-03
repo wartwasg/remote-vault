@@ -64,6 +64,10 @@ export async function getConnection(serverId) {
   pool.set(serverId, entry);
   client.on("close", () => pool.delete(serverId));
   client.on("end", () => pool.delete(serverId));
+  client.on("error", (err) => {
+    console.error(`SSH client error for server ${serverId}:`, err);
+    pool.delete(serverId);
+  });
   touchServer(serverId);
   return entry;
 }

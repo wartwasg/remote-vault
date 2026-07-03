@@ -8,6 +8,18 @@ import { addHistory } from "./config.js";
 
 const active = new Map(); // transferId -> { proc, meta }
 
+const DIR = path.join(os.homedir(), ".ssh-bridge");
+const ASKPASS_PATH = path.join(DIR, "askpass.sh");
+
+function ensureAskpass() {
+  if (!fs.existsSync(DIR)) {
+    fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
+  }
+  if (!fs.existsSync(ASKPASS_PATH)) {
+    fs.writeFileSync(ASKPASS_PATH, '#!/bin/sh\necho "$SSH_PASSWORD"\n', { mode: 0o755 });
+  }
+}
+
 function writeKeyToTemp(privateKey) {
   const p = path.join(os.tmpdir(), `ssh-bridge-${crypto.randomUUID()}.key`);
   fs.writeFileSync(p, privateKey, { mode: 0o600 });
@@ -26,7 +38,10 @@ function makeSshOpts(server) {
     tmpKey = writeKeyToTemp(server.privateKey);
     parts.push("-i", tmpKey);
   } else if (server.keyPath) {
-    parts.push("-i", server.keyPath);
+    const p = server.keyPath.startsWith("~")
+      ? path.join(os.homedir(), server.keyPath.slice(1))
+      : server.keyPath;
+    parts.push("-i", p);
   }
   return { sshCommand: parts.join(" "), tmpKey };
 }
@@ -56,11 +71,18 @@ export function startTransfer({ serverId, direction, localPath, remotePath, opti
 
   const env = { ...process.env };
   if (server.authType !== "key" && server.password) {
-    // Fall back to sshpass if available; otherwise the user should use a key.
-    // We prepend sshpass to the argv if present in PATH.
+    ensureAskpass();
+    env.SSH_ASKPASS = ASKPASS_PATH;
+    env.SSH_ASKPASS_REQUIRE = "force";
+    env.SSH_PASSWORD = server.password;
+    env.DISPLAY = ":0";
   }
 
-  const proc = spawn("rsync", args, { env });
+  if (!fs.existsSync(DIR)) {
+    fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
+  }
+
+  const proc = spawn("rsync", args, { env, stdio: ["ignore", "pipe", "pipe"] });
   const transferId = crypto.randomUUID();
   const meta = {
     id: transferId,
@@ -88,7 +110,7 @@ export function startTransfer({ serverId, direction, localPath, remotePath, opti
 
   const parseProgress = (line) => {
     // rsync --info=progress2 line: "     1,234,567  42%  10.24MB/s    0:00:12"
-    const m = line.match(/([\d,]+)\s+(\d+)%\s+([\d.]+[KMG]?B\/s)/);
+    const m = line.match(/([\d,]+)\s+(\d+)%\s+([\d.]+[KMGkmg]?B\/s)/i);
     if (m) {
       meta.transferred = Number(m[1].replace(/,/g, ""));
       meta.progress = Number(m[2]);

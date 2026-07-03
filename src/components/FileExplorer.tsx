@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import {
   Folder, FolderOpen, File as FileIcon, ChevronRight, Home, RotateCw,
   ArrowUp, Search, Loader2, AlertCircle, Upload, Download, HardDrive, Cloud,
+  Pencil, Trash2, FolderPlus,
 } from "lucide-react";
 import { api, type FileEntry } from "@/lib/agent";
 import { formatBytes, formatDate } from "@/lib/format";
@@ -14,10 +15,11 @@ interface Props {
   serverId?: string | null;
   onTransfer: (file: FileEntry) => void;
   onDropFiles: (paths: string[]) => void;
+  onPathChange?: (path: string) => void;
   dragBusy?: boolean;
 }
 
-export function FileExplorer({ side, serverId, onTransfer, onDropFiles, dragBusy }: Props) {
+export function FileExplorer({ side, serverId, onTransfer, onDropFiles, onPathChange, dragBusy }: Props) {
   const [path, setPath] = useState<string>(side === "local" ? "~" : ".");
   const [data, setData] = useState<{ path: string; entries: FileEntry[]; error?: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,8 +41,10 @@ export function FileExplorer({ side, serverId, onTransfer, onDropFiles, dragBusy
           : { path: p, entries: [], error: "No server selected" };
       setData(res);
       setPath(res.path);
+      onPathChange?.(res.path);
     } catch (e: any) {
       setData({ path: p, entries: [], error: e?.message || "Failed to list" });
+      onPathChange?.(p);
     } finally {
       setLoading(false);
     }
@@ -49,11 +53,60 @@ export function FileExplorer({ side, serverId, onTransfer, onDropFiles, dragBusy
   useEffect(() => {
     if (side === "remote" && !serverId) {
       setData({ path: "", entries: [], error: "Select a server to browse" });
+      onPathChange?.("");
       return;
     }
     load(side === "local" ? "~" : ".");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [side, serverId]);
+
+  const handleRename = async (entry: FileEntry) => {
+    const newName = prompt(`Rename "${entry.name}" to:`, entry.name);
+    if (!newName || newName === entry.name) return;
+    const idx = entry.path.lastIndexOf(separator);
+    const parentPath = idx === -1 ? "." : entry.path.slice(0, idx);
+    const newPath = parentPath + separator + newName;
+    try {
+      if (side === "local") {
+        await api.renameLocal(entry.path, newPath);
+      } else if (serverId) {
+        await api.renameRemote(serverId, entry.path, newPath);
+      }
+      load(path);
+    } catch (err: any) {
+      alert(`Failed to rename: ${err?.message || err}`);
+    }
+  };
+
+  const handleDelete = async (entry: FileEntry) => {
+    if (!confirm(`Are you sure you want to delete this ${entry.type}: "${entry.name}"?`)) return;
+    try {
+      if (side === "local") {
+        await api.deleteLocal(entry.path);
+      } else if (serverId) {
+        await api.deleteRemote(serverId, entry.path);
+      }
+      load(path);
+    } catch (err: any) {
+      alert(`Failed to delete: ${err?.message || err}`);
+    }
+  };
+
+  const handleMkdir = async () => {
+    const name = prompt("Enter new folder name:");
+    if (!name) return;
+    const newPath = path + (path.endsWith(separator) ? "" : separator) + name;
+    try {
+      if (side === "local") {
+        await api.mkdirLocal(newPath);
+      } else if (serverId) {
+        await api.mkdirRemote(serverId, newPath);
+      }
+      load(path);
+    } catch (err: any) {
+      alert(`Failed to create folder: ${err?.message || err}`);
+    }
+  };
 
   const goUp = () => {
     if (!data?.path) return;
@@ -151,6 +204,15 @@ export function FileExplorer({ side, serverId, onTransfer, onDropFiles, dragBusy
           >
             <Home className="h-3.5 w-3.5" />
           </button>
+          {(side === "local" || serverId) && (
+            <button
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-surface-2 hover:text-foreground"
+              onClick={handleMkdir}
+              title="New Folder"
+            >
+              <FolderPlus className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-surface-2 hover:text-foreground"
             onClick={() => load(path)}
@@ -215,7 +277,7 @@ export function FileExplorer({ side, serverId, onTransfer, onDropFiles, dragBusy
                 <th className="px-3 py-1.5 text-left font-medium">Name</th>
                 <th className="w-24 px-3 py-1.5 text-right font-medium">Size</th>
                 <th className="hidden w-40 px-3 py-1.5 text-right font-medium md:table-cell">Modified</th>
-                <th className="w-10" />
+                <th className="w-24" />
               </tr>
             </thead>
             <tbody>
@@ -255,20 +317,42 @@ export function FileExplorer({ side, serverId, onTransfer, onDropFiles, dragBusy
                       {formatDate(entry.mtime)}
                     </td>
                     <td className="px-1 py-1.5">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onTransfer(entry);
-                        }}
-                        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:bg-primary/20 hover:text-primary"
-                        title={side === "local" ? "Upload" : "Download"}
-                      >
-                        {side === "local" ? (
-                          <Upload className="h-3 w-3" />
-                        ) : (
-                          <Download className="h-3 w-3" />
-                        )}
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onTransfer(entry);
+                          }}
+                          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:bg-primary/20 hover:text-primary"
+                          title={side === "local" ? "Upload" : "Download"}
+                        >
+                          {side === "local" ? (
+                            <Upload className="h-3 w-3" />
+                          ) : (
+                            <Download className="h-3 w-3" />
+                          )}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRename(entry);
+                          }}
+                          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:bg-surface-3 hover:text-foreground"
+                          title="Rename"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(entry);
+                          }}
+                          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

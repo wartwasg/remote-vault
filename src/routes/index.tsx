@@ -139,21 +139,23 @@ function Dashboard() {
         <TopBar servers={servers} activeId={activeId} onSelect={setActiveId} />
 
         <div className="grid flex-1 min-h-0 grid-cols-1 gap-3 p-3 lg:grid-cols-2">
-          <ExplorerWrap onPath={setLocalPath}>
+          <div className="flex min-h-0 min-w-0 flex-col">
             <FileExplorer
               side="local"
               onTransfer={(e) => quickTransfer("local", e)}
               onDropFiles={(paths) => onDrop("local", paths)}
+              onPathChange={setLocalPath}
             />
-          </ExplorerWrap>
-          <ExplorerWrap onPath={setRemotePath}>
+          </div>
+          <div className="flex min-h-0 min-w-0 flex-col">
             <FileExplorer
               side="remote"
               serverId={activeId}
               onTransfer={(e) => quickTransfer("remote", e)}
               onDropFiles={(paths) => onDrop("remote", paths)}
+              onPathChange={setRemotePath}
             />
-          </ExplorerWrap>
+          </div>
         </div>
 
         <div className="px-3 pb-3">
@@ -169,17 +171,6 @@ function Dashboard() {
       />
     </div>
   );
-}
-
-function ExplorerWrap({
-  children, onPath,
-}: {
-  children: React.ReactNode;
-  onPath: (p: string) => void;
-}) {
-  // Just a passthrough for now — path tracking wired through FileExplorer footer would be
-  // cleaner, but this keeps the parent unaware of internal state.
-  return <div className="flex min-h-0 min-w-0 flex-col">{children}</div>;
 }
 
 function joinPath(base: string, name: string, sep: string) {
