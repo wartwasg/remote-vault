@@ -17,7 +17,12 @@ A premium desktop-web GUI for **SSH + rsync** file operations. Browse remote ser
                                                               Your remote servers
 ```
 
-The web UI runs in your browser. All actual SSH connections and rsync processes run inside the **local Node.js agent** on your own machine, so nothing sensitive ever leaves localhost.
+The web UI runs in your browser. All actual SSH connections and rsync processes run inside the **Node.js agent** on the host machine.
+
+This project supports two modes:
+
+- **Local mode**: UI and agent both run on one computer, using `127.0.0.1`.
+- **LAN server mode**: a server at `192.168.1.179` hosts the UI for client computers, and every client browser connects back to the agent on `192.168.1.179:8787`.
 
 ## Requirements
 
@@ -26,6 +31,42 @@ The web UI runs in your browser. All actual SSH connections and rsync processes 
 - **ssh** client on your `PATH`
 
 ## Quick start
+
+### LAN server mode
+
+Use this when the app is hosted on the server at `192.168.1.179` and other computers on the same network need to use it.
+
+Open two terminals in the project root on the server.
+
+**Terminal 1 — start the LAN agent**:
+```bash
+npm --prefix agent install
+npm --prefix agent run start:lan
+# → Agent: http://192.168.1.179:8787
+```
+
+**Terminal 2 — start the LAN web UI**:
+```bash
+npm install
+npm run dev:lan
+# → App: http://192.168.1.179:8080
+```
+
+Client computers should open:
+
+```text
+http://192.168.1.179:8080
+```
+
+When opened through the server IP, the browser automatically talks to the agent at:
+
+```text
+http://192.168.1.179:8787
+```
+
+Make sure the server firewall allows inbound traffic on ports `8080` and `8787`.
+
+### Local mode
 
 Open two terminals in the project root.
 
@@ -60,7 +101,8 @@ That's it. Add a server from the sidebar, test the connection, then drag files b
 
 - Server credentials, history, and known-hosts live in `~/.ssh-bridge/`.
 - Passwords and private keys are encrypted at rest and **never returned** to the browser.
-- The agent binds to `127.0.0.1` only. It is not exposed on your network.
+- In local mode, the agent binds to `127.0.0.1` only.
+- In LAN server mode, the agent binds to `0.0.0.0` so client computers can use the server-hosted app. Only run this on a trusted network and protect access to ports `8080` and `8787`.
 - Recommended: use SSH keys. Password auth for rsync requires `sshpass` on your system.
 
 ## Project structure
@@ -90,10 +132,24 @@ That's it. Add a server from the sidebar, test the connection, then drag files b
 
 ## Configuration
 
-The web UI defaults to `http://127.0.0.1:8787`. Override with:
+The web UI chooses the agent URL automatically:
+
+- If opened from `localhost` or `127.0.0.1`, it uses `http://127.0.0.1:8787`.
+- If opened from a LAN host like `http://192.168.1.179:8080`, it uses `http://192.168.1.179:8787`.
+
+Override with:
 
 ```bash
 VITE_AGENT_URL=http://127.0.0.1:9000 npm run dev
+```
+
+Useful scripts:
+
+```bash
+npm run dev          # local UI
+npm run dev:lan      # LAN UI on 0.0.0.0
+npm run preview:lan  # LAN preview after build
+npm --prefix agent run start:lan
 ```
 
 ## License
