@@ -39,6 +39,7 @@ function Dashboard() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ServerInfo | null>(null);
+  const [deleting, setDeleting] = useState<ServerInfo | null>(null);
   const [localPath, setLocalPath] = useState<string>("");
   const [remotePath, setRemotePath] = useState<string>("");
 
@@ -46,50 +47,57 @@ function Dashboard() {
     if (!activeId && servers.length > 0) setActiveId(servers[0].id);
   }, [servers, activeId]);
 
-  const openAdd = () => { setEditing(null); setDialogOpen(true); };
-  const openEdit = (s: ServerInfo) => { setEditing(s); setDialogOpen(true); };
+  const openAdd = () => {
+    setEditing(null);
+    setDialogOpen(true);
+  };
+  const openEdit = (s: ServerInfo) => {
+    setEditing(s);
+    setDialogOpen(true);
+  };
   const del = async (s: ServerInfo) => {
-    if (!confirm(`Delete server "${s.name}"?`)) return;
-    await api.deleteServer(s.id);
+    setDeleting(s);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    await api.deleteServer(deleting.id);
     await refreshServers();
-    if (activeId === s.id) setActiveId(null);
+    if (activeId === deleting.id) setActiveId(null);
+    setDeleting(null);
   };
 
   // Called when user clicks the transfer icon on a single file
   const quickTransfer = async (side: "local" | "remote", entry: FileEntry) => {
-    if (!activeId) {
-      alert("Select a server first");
-      return;
-    }
+    if (!activeId) return;
     if (side === "local") {
-      const dest = prompt("Upload to remote path:", remotePath || `/root/${entry.name}`);
-      if (!dest) return;
       await api.startTransfer({
         serverId: activeId,
         direction: "upload",
         localPath: entry.path,
-        remotePath: dest,
+        remotePath: joinPath(remotePath || ".", entry.name, "/"),
       });
     } else {
-      const dest = prompt("Download to local path:", `${localPath || "~"}/${entry.name}`);
-      if (!dest) return;
       await api.startTransfer({
         serverId: activeId,
         direction: "download",
-        localPath: dest,
+        localPath: joinPath(localPath || "~", entry.name, "/"),
         remotePath: entry.path,
       });
     }
   };
 
   // Drag & drop between panels — start a real rsync
-  const onDrop = async (targetSide: "local" | "remote", sourcePaths: string[]) => {
+  const onDrop = async (
+    targetSide: "local" | "remote",
+    sourcePaths: string[],
+    destinationPath?: string,
+  ) => {
     if (!activeId) return;
     for (const src of sourcePaths) {
       const name = src.split(/[/\\]/).pop() || "file";
       if (targetSide === "remote") {
-        // Local -> Remote (upload). Destination = current remotePath / name
-        const dest = joinPath(remotePath || ".", name, "/");
+        const dest = joinPath(destinationPath || remotePath || ".", name, "/");
         await api.startTransfer({
           serverId: activeId,
           direction: "upload",
@@ -97,7 +105,7 @@ function Dashboard() {
           remotePath: dest,
         });
       } else {
-        const dest = joinPath(localPath || "~", name, "/");
+        const dest = joinPath(destinationPath || localPath || "~", name, "/");
         await api.startTransfer({
           serverId: activeId,
           direction: "download",
@@ -142,9 +150,11 @@ function Dashboard() {
           <div className="flex min-h-0 min-w-0 flex-col">
             <FileExplorer
               side="local"
+              serverId={activeId}
               onTransfer={(e) => quickTransfer("local", e)}
-              onDropFiles={(paths) => onDrop("local", paths)}
+              onDropFiles={(paths, destinationPath) => onDrop("local", paths, destinationPath)}
               onPathChange={setLocalPath}
+              peerPath={remotePath}
             />
           </div>
           <div className="flex min-h-0 min-w-0 flex-col">
@@ -152,8 +162,9 @@ function Dashboard() {
               side="remote"
               serverId={activeId}
               onTransfer={(e) => quickTransfer("remote", e)}
-              onDropFiles={(paths) => onDrop("remote", paths)}
+              onDropFiles={(paths, destinationPath) => onDrop("remote", paths, destinationPath)}
               onPathChange={setRemotePath}
+              peerPath={localPath}
             />
           </div>
         </div>
@@ -169,6 +180,33 @@ function Dashboard() {
         onClose={() => setDialogOpen(false)}
         onSaved={refreshServers}
       />
+      {deleting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm">
+          <div className="glass-strong w-full max-w-md overflow-hidden rounded-xl shadow-elevated">
+            <div className="border-b border-border px-4 py-3">
+              <div className="text-sm font-semibold">Delete Server</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Remove "{deleting.name}" from this workspace? Saved credentials for this server will
+                be removed locally.
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-4 py-3">
+              <button
+                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+                onClick={() => setDeleting(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground hover:brightness-110"
+                onClick={confirmDelete}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

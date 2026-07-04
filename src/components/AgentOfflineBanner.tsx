@@ -1,5 +1,6 @@
 import { AlertTriangle, Terminal, Copy } from "lucide-react";
 import { useState } from "react";
+import { agentUrl } from "@/lib/agent";
 
 export function AgentOfflineBanner() {
   const [copied, setCopied] = useState<string | null>(null);
@@ -19,7 +20,7 @@ export function AgentOfflineBanner() {
           <div className="min-w-0 flex-1">
             <div className="text-lg font-semibold">Local agent not running</div>
             <div className="mt-1 text-sm text-muted-foreground">
-              SSH Bridge needs its companion agent on <code className="font-mono">127.0.0.1:8787</code>{" "}
+              SSH Bridge needs its companion agent on <code className="font-mono">{agentUrl}</code>{" "}
               to open SSH sessions and run rsync. Start it from your terminal — one time, then this
               page will connect automatically.
             </div>
@@ -27,7 +28,7 @@ export function AgentOfflineBanner() {
             <div className="mt-4 space-y-2">
               {[
                 { label: "1. Install dependencies", cmd: "cd agent && npm install" },
-                { label: "2. Start the agent", cmd: "npm start" },
+                { label: "2. Start the agent", cmd: "npm run start:lan" },
               ].map(({ label, cmd }) => (
                 <div key={label}>
                   <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">

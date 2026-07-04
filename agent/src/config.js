@@ -41,11 +41,17 @@ function decrypt(blob) {
 
 function readRaw() {
   ensureDir();
-  if (!fs.existsSync(FILE)) return { servers: [], history: [] };
+  if (!fs.existsSync(FILE)) return { servers: [], history: [], bookmarks: [], presets: [] };
   try {
-    return JSON.parse(fs.readFileSync(FILE, "utf8"));
+    const data = JSON.parse(fs.readFileSync(FILE, "utf8"));
+    return {
+      servers: data.servers || [],
+      history: data.history || [],
+      bookmarks: data.bookmarks || [],
+      presets: data.presets || [],
+    };
   } catch {
-    return { servers: [], history: [] };
+    return { servers: [], history: [], bookmarks: [], presets: [] };
   }
 }
 
@@ -134,4 +140,79 @@ export function addHistory(entry) {
 
 export function listHistory() {
   return readRaw().history || [];
+}
+
+export function listBookmarks(serverId = null) {
+  const { bookmarks } = readRaw();
+  return bookmarks.filter((b) => !serverId || b.serverId === serverId || b.side === "local");
+}
+
+export function saveBookmark(input) {
+  const data = readRaw();
+  const id = input.id || crypto.randomUUID();
+  const bookmark = {
+    id,
+    serverId: input.serverId || null,
+    side: input.side,
+    name: input.name || input.path,
+    path: input.path,
+    createdAt: input.createdAt || new Date().toISOString(),
+  };
+  data.bookmarks = data.bookmarks.filter((b) => b.id !== id);
+  data.bookmarks.unshift(bookmark);
+  data.bookmarks = data.bookmarks.slice(0, 200);
+  writeRaw(data);
+  return bookmark;
+}
+
+export function deleteBookmark(id) {
+  const data = readRaw();
+  data.bookmarks = data.bookmarks.filter((b) => b.id !== id);
+  writeRaw(data);
+  return true;
+}
+
+export function listPresets() {
+  const { presets } = readRaw();
+  if (presets.length > 0) return presets;
+  return [
+    {
+      id: "fast",
+      name: "Fast sync",
+      options: { conflict: "overwrite" },
+    },
+    {
+      id: "safe",
+      name: "Safe backup",
+      options: { conflict: "rename", backup: true },
+    },
+    {
+      id: "mirror",
+      name: "Mirror deploy",
+      options: { delete: true, conflict: "overwrite" },
+    },
+  ];
+}
+
+export function savePreset(input) {
+  const data = readRaw();
+  const id = input.id || crypto.randomUUID();
+  const preset = {
+    id,
+    name: input.name || "Transfer preset",
+    options: input.options || {},
+    createdAt: input.createdAt || new Date().toISOString(),
+  };
+  data.presets = data.presets.filter((p) => p.id !== id);
+  data.presets.unshift(preset);
+  data.presets = data.presets.slice(0, 50);
+  writeRaw(data);
+  return preset;
+}
+
+export function deletePreset(id) {
+  const data = readRaw();
+  data.presets = data.presets.filter((p) => p.id !== id);
+  writeRaw(data);
+  return true;
 }

@@ -16,7 +16,16 @@ npm install
 npm start
 ```
 
-The agent listens on `http://127.0.0.1:8787` (localhost only — never exposed to network).
+By default the agent listens on `http://127.0.0.1:8787`.
+
+For access from another computer on the same network, run:
+
+```bash
+HOST=0.0.0.0 PUBLIC_HOST=192.168.1.179 npm start
+```
+
+Then start the web UI with `npm run dev:lan` from the project root and open `http://192.168.1.179:8080`.
+Clients that open the UI from that server IP automatically connect to the agent at `http://192.168.1.179:8787`.
 
 ## Data
 

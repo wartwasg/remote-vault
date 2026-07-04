@@ -6,6 +6,7 @@
   "description": "Local agent that exposes SSH + rsync operations to the SSH Bridge web UI over HTTP + WebSocket.",
   "scripts": {
     "start": "node src/server.js",
+    "start:lan": "HOST=0.0.0.0 PUBLIC_HOST=192.168.1.179 node src/server.js",
     "dev": "node --watch src/server.js"
   },
   "dependencies": {
